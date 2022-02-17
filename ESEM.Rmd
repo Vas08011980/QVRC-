@@ -112,9 +112,9 @@ writeLines(esem_model)
 Finally we fit the model and claulate the reliabilities
 ```{r}
 esem_fit <- cfa(esem_model, data_esem, std.lv=T, estimator="WLS")
-summary(esem_fit, fit.measures=TRUE, standardized=TRUE, modindices=TRUE)
+summary(esem_fit, fit.measures=TRUE, standardized=TRUE)
 
-reliability(esem_fit1, omit.imps = c("no.conv", "no.se"))
+reliability(esem_fit, omit.imps = c("no.conv", "no.se"))
 
 lavaanPlot(model = esem_fit, coefs = TRUE,
            stand = TRUE,
