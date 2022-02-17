@@ -1,0 +1,124 @@
+---
+title: "ESEM Model Five Factors"
+author: "Vas Stavropoulos Qasim Latifi based on Maria Prokofieva Syntax"
+date: "17/02/2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Fist step: Install and Run your package library
+#install.packages("lavaan")
+#install.packages("lavaanPlot")
+#install.packages("semPlot")
+#install.packages("EFA.dimensions")
+#install.packages("tidyverse")
+#install.packages("psych")
+#install.packages("semtools)
+
+library(lavaan)
+library(lavaanPlot)
+library(semPlot)
+library(EFA.dimensions)
+library(tidyverse)
+library(psych)
+library(semTools)
+
+```
+Second step: Import, access and assess the descriptives of your data. Data needs to be placed in the same file that connects with your github directory.You only need to replace your file's name on the following R syntax.
+
+```{r}
+data<-haven::read_sav("DATAR.sav")%>%
+  mutate_if(is.character, as.factor) 
+glimpse(data)
+knitr::kable(describe(data), caption = "Descriptive stats", digits = 2)
+
+```
+Third step: Create and use EFA "blocks" as part of a SEM model. 
+EFA blocks can use either *Geomin* rotation or *target* rotations.
+Both types of rotations are oblique, meaning they reorient the factors so that they fall closer to clusters of vectors representing manifest variables, thereby simplifying the mathematical description of the manifest variables. Usually geomin rotation outperforms target.
+Reminding that the SDQ five factor item structure is as following:
+Peer problems (PP)
+"s6_1", "s11_1R", "s14_1R", "s19_1", "s23_1"
+  
+Conduct problems (CP)
+"s5_1", "s7_1R", "s12_1", "s18_1", "s22_1"
+
+Emotional Symptoms (ES)
+"s3_1", "s8_1", "s13_1", "s16_1", "s24_1"
+
+Hyperactivity/inattention (HA)
+"s2_1","s10_1","s15_1","s21_1R","s25_1R"
+
+Prosocial (PS)
+"s1_1","s4_1","s9_1","s17_1","s20_1"
+Thus we first create a main factors items' loadings list object.
+
+```{r}
+main_loadings_list <- list(
+                          pp = c("s6_1", "s11_1R", "s14_1R", "s19_1", "s23_1"),
+                          cp = c("s5_1", "s7_1R", "s12_1", "s18_1", "s22_1"),
+                          es = c("s3_1", "s8_1", "s13_1", "s16_1", "s24_1"),
+                          ha = c("s2_1","s10_1","s15_1","s21_1R","s25_1R"),
+                          ps = c("s1_1","s4_1","s9_1","s17_1","s20_1")
+                          ) 
+```
+Then based on the list created you select the factor columns required for your ESEM.
+```{r}
+data_esem<-data%>%
+  select(all_of(unlist(main_loadings_list, use.names=FALSE)))
+knitr::kable(describe(data_esem), caption = "Descriptive stats", digits = 2)
+```
+Then you rotate and the loadings of this rotation for the preselected factors and items are calculated as a new object
+```{r}
+geomin_rot <- make.keys(data_esem, main_loadings_list)%>%
+  scrub(isvalue = 1)
+geomin_rot
+knitr::kable(describe(geomin_rot), caption = "Descriptive stats", digits = 2)
+```
+From the ESEM data remove missing values before using for either EFA and CFA analyses.
+```{r}
+data_esemcomplete<-data_esem[complete.cases(data_esem),]
+knitr::kable(describe(data_esemcomplete), caption = "Descriptive stats", digits = 2)
+```
+More cleaning is needed as -3 scores exist and SDQ should not have negative scores
+Thus an extra cleaning step should be added before progressing.
+The next step is for the ESEM five factor modelas a new object to be calculated before fitted.
+```{r}
+esem_loadings<-as_tibble(geomin_rot, rownames=NA)%>%
+  rownames_to_column(var = "item")
+fixed<-0.4
+syntax<-esem_loadings%>%
+  pivot_longer(-item, names_to="latent", values_to="value" )%>%
+  mutate(is_anchor=case_when(
+           is.na(value) ~ TRUE,
+           TRUE ~ FALSE 
+           ),
+         syntax=case_when(
+           is_anchor ~ item,
+           TRUE ~ paste0("start(",fixed,")*", item)
+         )
+  )%>%
+  select(latent, syntax)
+esem_model<-syntax%>%
+  group_by(latent)%>%
+  mutate(syntax=paste0(latent, "=~", paste0(syntax, collapse="+")))%>%
+  distinct(latent, .keep_all = TRUE)%>%
+  ungroup()%>%
+  select(-latent)
+  
+esem_model<-paste0(esem_model$syntax, "\n", collapse="")
+writeLines(esem_model)
+```
+Finally we fit the model and claulate the reliabilities
+```{r}
+esem_fit <- cfa(esem_model, data_esem, std.lv=T, estimator="WLS")
+summary(esem_fit, fit.measures=TRUE, standardized=TRUE, modindices=TRUE)
+
+reliability(esem_fit1, omit.imps = c("no.conv", "no.se"))
+
+lavaanPlot(model = esem_fit, coefs = TRUE,
+           stand = TRUE,
+           edge_options = list(color ='grey'))
+```
+
+
